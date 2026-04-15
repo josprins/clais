@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: ./src/gateway
+      dockerfile: Dockerfile
+    container_name: stuur-gateway
+    restart: unless-stopped
+    env_file:
+      - ./src/gateway/.env
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+    volumes:
+      - gateway-logs:/app/logs
+    # No ports exposed externally - Telegram uses webhooks or long-polling internally
+    # For health checks, we can expose internally only
+    networks:
+      - stuur-network
+    depends_on:
+      surreal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # SurrealDB - added in S-004
+  surreal:
+    image: surrealdb/surrealdb:latest
+    container_name: stuur-db
+    restart: unless-stopped
+    command: start --log info --user root --pass root file:/data/stuur.db
+    volumes:
+      - surreal-data:/data
+    networks:
+      - stuur-network
+    ports:
+      - "8000:8000" # HTTP API
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Ollama will be added in S-022
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: stuur-ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - stuur-network
+  #   ports:
+  #     - "11434:11434"
+
+volumes:
+  gateway-logs:
+  surreal-data:
+  # ollama-data:
+
+networks:
+  stuur-network:
+    driver: bridge
